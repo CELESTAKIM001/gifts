@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Geopram Technologies Gifts — Donate</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      display: flex; justify-content: center; align-items: center;
+      min-height: 100vh;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    }
+    h1 { color: #1a1a2e; font-size: 1.6rem; margin-bottom: 6px; }
+    p { color: #666; margin-bottom: 28px; font-size: 0.95rem; }
+    label { font-size: 0.85rem; color: #444; font-weight: 600; display: block; margin-bottom: 6px; }
+    input {
+      width: 100%; padding: 12px 14px; border: 1.5px solid #ddd;
+      border-radius: 8px; font-size: 1rem; margin-bottom: 18px;
+      transition: border 0.2s;
+    }
+    input:focus { outline: none; border-color: #4CAF50; }
+    button {
+      width: 100%; padding: 14px; background: #4CAF50;
+      color: white; border: none; border-radius: 8px;
+      font-size: 1rem; font-weight: 600; cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #43a047; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    #status {
+      margin-top: 18px; padding: 12px; border-radius: 8px;
+      font-size: 0.9rem; text-align: center; display: none;
+    }
+    .success { background: #e8f5e9; color: #2e7d32; display: block !important; }
+    .error { background: #ffebee; color: #c62828; display: block !important; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🎁 Geopram Gifts</h1>
+    <p>Support us with an M-Pesa donation. You'll receive a prompt on your phone.</p>
+
+    <label for="phone">M-Pesa Phone Number</label>
+    <input type="tel" id="phone" placeholder="e.g. 254712345678" />
+
+    <label for="amount">Amount (KES)</label>
+    <input type="number" id="amount" placeholder="e.g. 100" min="1" />
+
+    <button id="btn" onclick="donate()">Donate via M-Pesa</button>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    async function donate() {
+      const phone = document.getElementById("phone").value.trim();
+      const amount = document.getElementById("amount").value.trim();
+      const btn = document.getElementById("btn");
+      const status = document.getElementById("status");
+
+      status.className = "";
+      status.style.display = "none";
+
+      if (!phone || !amount) {
+        status.textContent = "Please enter both phone number and amount.";
+        status.className = "error";
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "Sending prompt...";
+
+      try {
+        const res = await fetch("/api/stk_push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone, amount: parseInt(amount) })
+        });
+        const data = await res.json();
+
+        if (data.ResponseCode === "0") {
+          status.textContent = "✅ Check your phone for the M-Pesa prompt!";
+          status.className = "success";
+        } else {
+          status.textContent = "❌ " + (data.errorMessage || data.ResponseDescription || "Something went wrong.");
+          status.className = "error";
+        }
+      } catch (e) {
+        status.textContent = "❌ Network error. Please try again.";
+        status.className = "error";
+      }
+
+      btn.disabled = false;
+      btn.textContent = "Donate via M-Pesa";
+    }
+  </script>
+</body>
+</html>
