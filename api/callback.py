@@ -12,3 +12,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(json.dumps({"ResultCode": 0, "ResultDesc": "Success"}).encode())
+        module.exports = (req, res) => {
+  console.log('Callback received:', JSON.stringify(req.body, null, 2));
+  res.status(200).json({ ResultCode: 0, ResultDesc: 'Success' });
+};
