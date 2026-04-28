@@ -1,79 +1,61 @@
-import json
-import os
-import requests
-import base64
-from datetime import datetime
-from http.server import BaseHTTPRequestHandler
+const https = require('https');
 
-CONSUMER_KEY = os.environ.get("CONSUMER_KEY")
-CONSUMER_SECRET = os.environ.get("CONSUMER_SECRET")
-SHORTCODE = os.environ.get("SHORTCODE")
-PASSKEY = os.environ.get("PASSKEY")
-CALLBACK_URL = os.environ.get("CALLBACK_URL")
+module.exports = async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-def get_access_token():
-    url = "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
-    credentials = base64.b64encode(f"{CONSUMER_KEY}:{CONSUMER_SECRET}".encode()).decode()
-    headers = {"Authorization": f"Basic {credentials}"}
-    r = requests.get(url, headers=headers)
-    return r.json()["access_token"]
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-def initiate_stk(phone, amount):
-    token = get_access_token()
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    password = base64.b64encode(f"{SHORTCODE}{PASSKEY}{timestamp}".encode()).decode()
+  const { phone, amount } = req.body;
+  if (!phone || !amount) return res.status(400).json({ error: 'Phone and amount required' });
 
-    payload = {
-        "BusinessShortCode": SHORTCODE,
-        "Password": password,
-        "Timestamp": timestamp,
-        "TransactionType": "CustomerPayBillOnline",
-        "Amount": amount,
-        "PartyA": phone,
-        "PartyB": SHORTCODE,
-        "PhoneNumber": phone,
-        "CallBackURL": CALLBACK_URL,
-        "AccountReference": "GeopramGifts",
-        "TransactionDesc": "Donation to Geopram Technologies Gifts"
-    }
+  const CONSUMER_KEY = process.env.CONSUMER_KEY;
+  const CONSUMER_SECRET = process.env.CONSUMER_SECRET;
+  const SHORTCODE = process.env.SHORTCODE;
+  const PASSKEY = process.env.PASSKEY;
+  const CALLBACK_URL = process.env.CALLBACK_URL;
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
+  try {
+    // Get access token
+    const credentials = Buffer.from(`${CONSUMER_KEY}:${CONSUMER_SECRET}`).toString('base64');
+    const tokenRes = await fetch('https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials', {
+      headers: { 'Authorization': `Basic ${credentials}` }
+    });
+    const tokenData = await tokenRes.json();
+    const token = tokenData.access_token;
 
-    r = requests.post(
-        "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
-        json=payload,
-        headers=headers
-    )
-    return r.json()
+    // Generate password
+    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+    const password = Buffer.from(`${SHORTCODE}${PASSKEY}${timestamp}`).toString('base64');
 
-class handler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length))
+    // STK Push
+    const stkRes = await fetch('https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        BusinessShortCode: SHORTCODE,
+        Password: password,
+        Timestamp: timestamp,
+        TransactionType: 'CustomerPayBillOnline',
+        Amount: amount,
+        PartyA: phone,
+        PartyB: SHORTCODE,
+        PhoneNumber: phone,
+        CallBackURL: CALLBACK_URL,
+        AccountReference: 'GeopramGifts',
+        TransactionDesc: 'Donation to Geopram Technologies Gifts'
+      })
+    });
 
-        phone = body.get("phone")
-        amount = body.get("amount")
+    const stkData = await stkRes.json();
+    return res.status(200).json(stkData);
 
-        if not phone or not amount:
-            self.send_response(400)
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": "Phone and amount required"}).encode())
-            return
-
-        result = initiate_stk(phone, amount)
-
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(json.dumps(result).encode())
-
-    def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.end_headers()
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+};
